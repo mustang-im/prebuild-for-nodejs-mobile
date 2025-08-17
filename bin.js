@@ -91,11 +91,10 @@ if (platform === 'android' && !process.env.ANDROID_NDK_HOME) {
  * }} PackageJSON
  */
 
-const androidLib = process.env.ANDROID_LIBNODE;
-const iosLib = process.env.IOS_LIBNODE;
+const libEnv = `${platform.toUpperCase()}_LIBNODE`;
 const noLibCache = process.env.NO_LIBNODE_CACHE;
-/** @type {string} */
-let libDir;
+/** @type {string | undefined} */
+let libDir = process.env[libEnv];
 
 /**
  * Sets the correct lib path for the platform and
@@ -104,10 +103,8 @@ let libDir;
  */
 async function setLibDir() {
   try {
-    // @ts-ignore
-    libDir = platform == 'android' ? androidLib : iosLib;
     if (!libDir) {
-      throw new Error(`ERROR: ${platform == 'android' ? 'ANDROID_LIBNODE' : 'IOS_LIBNODE'} environment variable missing.`);
+      throw new Error(`ERROR: ${libEnv} environment variable missing.`);
     }
     if (!libDir?.startsWith("https://")) {
       return;
@@ -134,6 +131,9 @@ async function setLibDir() {
 async function fetchLib(url, retries = 5) {
   return await new Promise(async (resolve, reject) => {
     try {
+      if (!url) {
+        reject(new Error("ERROR: Missing lib URL"));
+      }
       if (retries == 0) {
         reject(new Error('ERROR: Too many retries while fetching libnode...'));
       }
