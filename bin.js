@@ -7,6 +7,8 @@ const TOML = require('@iarna/toml');
 const {chunksToLinesAsync, chomp} = require('@rauschma/stringio');
 const {spawn, exec} = require('child_process');
 const p = require('util').promisify;
+const https = require('https');
+const AdmZip = require('adm-zip');
 
 const MIN_ANDROID_SDK_VERSION = 24;
 const VALID_MIN_IOS_VERSION = '13.0'; // This is hard-coded in nodejs-mobile
@@ -88,6 +90,85 @@ if (platform === 'android' && !process.env.ANDROID_NDK_HOME) {
  *   gypfile?: boolean;
  * }} PackageJSON
  */
+
+const androidLib = process.env.ANDROID_LIBNODE;
+const iosLib = process.env.IOS_LIBNODE;
+const noLibCache = process.env.NO_LIBNODE_CACHE;
+/** @type {string} */
+let libDir;
+
+/**
+ * Sets the correct lib path for the platform and
+ * fetches the lib if source is an `https://` url
+ * @returns 
+ */
+async function setLibDir() {
+  try {
+    // @ts-ignore
+    libDir = platform == 'android' ? androidLib : iosLib;
+    if (!libDir) {
+      throw new Error(`ERROR: ${platform == 'android' ? 'ANDROID_LIBNODE' : 'IOS_LIBNODE'} environment variable missing.`);
+    }
+    if (!libDir?.startsWith("https://")) {
+      return;
+    }
+    let url = libDir;
+    libDir = path.join(__dirname, platform, 'libnode');
+    if (!noLibCache && fs.existsSync(libDir)) {
+      return;
+    }
+    let zipPath = await fetchLib(url);
+    await extractAsset(zipPath, libDir);
+  } catch (ex) {
+    console.error(ex);
+    process.exit(0);
+  }
+}
+
+/**
+ * 
+ * @param {string} url 
+ * @param {number} [retries=5] 
+ * @returns {Promise<string>}
+ */
+async function fetchLib(url, retries = 5) {
+  return await new Promise(async (resolve, reject) => {
+    try {
+      if (retries == 0) {
+        reject(new Error('ERROR: Too many retries while fetching libnode...'));
+      }
+      https.get(url, {headers: {'User-Agent': 'node.js'}}, async (fileRes) => {
+        fileRes.on("error", (ex) => {
+          reject(ex);
+        });
+        if (fileRes.statusCode == 302) {
+          // @ts-ignore
+          resolve(await fetchLib(fileRes.headers.location, retries -= 1));
+        }
+        const fileStream = fs.createWriteStream("tmp.zip");
+        fileRes.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close();
+          // @ts-ignore
+          resolve(fileStream.path);
+        });
+      });
+    } catch (ex) {
+      reject(ex);
+    }
+  });
+}
+
+/**
+ * 
+ * @param {string} zipPath 
+ * @param {string} destinationPath 
+ */
+async function extractAsset(zipPath, destinationPath) {
+  let zip = new AdmZip(zipPath);
+  zip.extractAllTo(destinationPath, true);
+  fs.unlinkSync(zipPath);
+}
 
 /**
  * @param {import('stream').Readable} readable
@@ -303,8 +384,7 @@ function undoPackageJSONPatch(cwd) {
  */
 function buildGypModule(cwd) {
   const nodeMobileHeaders = path.resolve(
-    path.dirname(require.resolve('nodejs-mobile-react-native')),
-    platform,
+    libDir,
     'libnode',
   );
 
@@ -484,8 +564,7 @@ function buildRustModule(cwd) {
     }
 
     const nodeMobileBin = path.resolve(
-      path.dirname(require.resolve('nodejs-mobile-react-native')),
-      'android',
+      libDir,
       'libnode',
       'bin',
     );
@@ -690,6 +769,8 @@ async function waitForCompilationTask(type, taskFn, cwd) {
 }
 
 (async function main() {
+  await setLibDir();
+
   // Build the module
   const cwd = process.cwd();
   let task;
