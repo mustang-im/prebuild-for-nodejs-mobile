@@ -145,7 +145,8 @@ async function fetchLib(url, retries = 5) {
           // @ts-ignore
           resolve(await fetchLib(fileRes.headers.location, retries -= 1));
         }
-        const fileStream = fs.createWriteStream("tmp.zip");
+        const tmpPath = path.join(__dirname, "tmp.zip");
+        const fileStream = fs.createWriteStream(tmpPath);
         fileRes.pipe(fileStream);
         fileStream.on('finish', () => {
           fileStream.close();
@@ -383,10 +384,7 @@ function undoPackageJSONPatch(cwd) {
  * @returns {import('child_process').ChildProcess}
  */
 function buildGypModule(cwd) {
-  const nodeMobileHeaders = path.resolve(
-    libDir,
-    'libnode',
-  );
+  const nodeMobileHeaders = path.resolve(libDir);
 
   let GYP_DEFINES = `OS=${platform} target_platform=${platform} target_arch=${arch}`;
 
@@ -563,11 +561,7 @@ function buildRustModule(cwd) {
       process.exit(1);
     }
 
-    const nodeMobileBin = path.resolve(
-      libDir,
-      'libnode',
-      'bin',
-    );
+    const nodeMobileBin = path.resolve(libDir, 'bin');
 
     let compilerPrefix = '';
     let ndkArch = '';
