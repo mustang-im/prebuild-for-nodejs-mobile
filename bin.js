@@ -181,6 +181,8 @@ async function extractAsset(zipPath, destinationPath) {
  * `gyp: Undefined variable android_ndk_path in binding.gyp while trying to load binding.gypi`
  */
 function createGYPconfig() {
+  if (platform != 'android') return;
+  
   const gypDir = path.join(os.homedir(), '.gyp');
   const gypFile = path.join(gypDir, 'include.gypi');
 
