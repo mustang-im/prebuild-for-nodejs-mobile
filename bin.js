@@ -91,10 +91,13 @@ if (platform === 'android' && !process.env.ANDROID_NDK_HOME) {
  * }} PackageJSON
  */
 
+const iosDefaultLib = 'https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-ios.zip';
+const androidDefaultLib = 'https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip';
+
 const libEnv = `${platform.toUpperCase()}_LIBNODE`;
 const noLibCache = process.env.NO_LIBNODE_CACHE;
-/** @type {string | undefined} */
-let libDir = process.env[libEnv];
+/** @type {string} */
+let libDir = process.env[libEnv] ?? platform == 'android' ? androidDefaultLib : iosDefaultLib;
 
 /**
  * Sets the correct lib path for the platform and
@@ -103,9 +106,6 @@ let libDir = process.env[libEnv];
  */
 async function setLibDir() {
   try {
-    if (!libDir) {
-      throw new Error(`ERROR: ${libEnv} environment variable missing.`);
-    }
     if (!libDir?.startsWith("https://")) {
       return;
     }
@@ -384,7 +384,6 @@ function undoPackageJSONPatch(cwd) {
  * @returns {import('child_process').ChildProcess}
  */
 function buildGypModule(cwd) {
-  // @ts-ignore
   const nodeMobileHeaders = path.resolve(libDir);
 
   let GYP_DEFINES = `OS=${platform} target_platform=${platform} target_arch=${arch}`;
@@ -562,7 +561,6 @@ function buildRustModule(cwd) {
       process.exit(1);
     }
 
-    // @ts-ignore
     const nodeMobileBin = path.resolve(libDir, 'bin');
 
     let compilerPrefix = '';
