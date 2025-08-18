@@ -384,6 +384,7 @@ function undoPackageJSONPatch(cwd) {
  * @returns {import('child_process').ChildProcess}
  */
 function buildGypModule(cwd) {
+  // @ts-ignore
   const nodeMobileHeaders = path.resolve(libDir);
 
   let GYP_DEFINES = `OS=${platform} target_platform=${platform} target_arch=${arch}`;
@@ -561,6 +562,7 @@ function buildRustModule(cwd) {
       process.exit(1);
     }
 
+    // @ts-ignore
     const nodeMobileBin = path.resolve(libDir, 'bin');
 
     let compilerPrefix = '';
