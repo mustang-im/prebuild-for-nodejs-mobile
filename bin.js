@@ -115,8 +115,12 @@ async function setLibDir() {
     if (!noLibCache && fs.existsSync(libDir)) {
       return;
     }
+    console.log('Downloading libnode...');
     let zipPath = await fetchLib(url);
+    console.log('Download finished!');
+    console.log('Extracting libnode...');
     await extractAsset(zipPath, libDir);
+    console.log('Extraction finished!');
   } catch (ex) {
     console.error(ex);
     process.exit(0);
