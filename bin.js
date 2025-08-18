@@ -9,6 +9,7 @@ const {spawn, exec} = require('child_process');
 const p = require('util').promisify;
 const https = require('https');
 const AdmZip = require('adm-zip');
+const os = require('os');
 
 const MIN_ANDROID_SDK_VERSION = 24;
 const VALID_MIN_IOS_VERSION = '13.0'; // This is hard-coded in nodejs-mobile
@@ -169,6 +170,23 @@ async function extractAsset(zipPath, destinationPath) {
   let zip = new AdmZip(zipPath);
   zip.extractAllTo(destinationPath, true);
   fs.unlinkSync(zipPath);
+}
+
+/**
+ * Create GYP file to fix error:
+ * `gyp: Undefined variable android_ndk_path in binding.gyp while trying to load binding.gypi`
+ */
+function createGYPconfig() {
+  const gypDir = path.join(os.homedir(), '.gyp');
+  const gypFile = path.join(gypDir, 'include.gypi');
+
+  if (!fs.existsSync(gypDir)) {
+    fs.mkdirSync(gypDir);
+  }
+
+  const content = "{'variables':{'android_ndk_path':''}}";
+  fs.writeFileSync(gypFile, content);
+  console.log(`Created GYP config file at ${gypFile}`);
 }
 
 /**
@@ -763,6 +781,7 @@ async function waitForCompilationTask(type, taskFn, cwd) {
 }
 
 (async function main() {
+  createGYPconfig();
   await setLibDir();
 
   // Build the module
