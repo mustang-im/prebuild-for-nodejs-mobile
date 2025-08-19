@@ -35,6 +35,11 @@ For Android, you can specify the Android SDK version with `--sdkXX`, otherwise b
 $ npx prebuild-for-nodejs-mobile android-arm64 --sdk28
 ```
 
+Set the environment variables `IOS_LIBNODE` and `ANDROID_LIBNODE` for compiling to custom version for libnode. The values can
+either be an absolute path to a local lib or a remote URL containing the lib.
+
+An `include.gypi` file is created with contents `{'variables':{'android_ndk_path':''}}` to prevent an error `gyp: Undefined variable android_ndk_path in binding.gyp while trying to load binding.gyp` for Android builds.
+
 ## Features
 
 - [x] Compiles native modules for iOS

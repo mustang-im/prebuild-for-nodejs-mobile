@@ -7,6 +7,9 @@ const TOML = require('@iarna/toml');
 const {chunksToLinesAsync, chomp} = require('@rauschma/stringio');
 const {spawn, exec} = require('child_process');
 const p = require('util').promisify;
+const https = require('https');
+const AdmZip = require('adm-zip');
+const os = require('os');
 
 const MIN_ANDROID_SDK_VERSION = 24;
 const VALID_MIN_IOS_VERSION = '13.0'; // This is hard-coded in nodejs-mobile
@@ -88,6 +91,109 @@ if (platform === 'android' && !process.env.ANDROID_NDK_HOME) {
  *   gypfile?: boolean;
  * }} PackageJSON
  */
+
+const iosDefaultLib = 'https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-ios.zip';
+const androidDefaultLib = 'https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip';
+
+const libEnv = `${platform.toUpperCase()}_LIBNODE`;
+const noLibCache = process.env.NO_LIBNODE_CACHE;
+/** @type {string} */
+let libDir = process.env[libEnv] ?? (platform == 'android' ? androidDefaultLib : iosDefaultLib);
+
+/**
+ * Sets the correct lib path for the platform and
+ * fetches the lib if source is an `https://` url
+ * @returns 
+ */
+async function setLibDir() {
+  try {
+    if (!libDir?.startsWith("https://")) {
+      return;
+    }
+    let url = libDir;
+    libDir = path.join(__dirname, platform, 'libnode');
+    if (!noLibCache && fs.existsSync(libDir)) {
+      return;
+    }
+    console.log('Downloading libnode...');
+    let zipPath = await fetchLib(url);
+    console.log('Download finished!');
+    console.log('Extracting libnode...');
+    await extractAsset(zipPath, libDir);
+    console.log('Extraction finished!');
+  } catch (ex) {
+    console.error(ex);
+    process.exit(0);
+  }
+}
+
+/**
+ * 
+ * @param {string} url 
+ * @param {number} [retries=5] 
+ * @returns {Promise<string>}
+ */
+async function fetchLib(url, retries = 5) {
+  return await new Promise(async (resolve, reject) => {
+    try {
+      if (!url) {
+        reject(new Error("ERROR: Missing lib URL"));
+      }
+      if (retries == 0) {
+        reject(new Error('ERROR: Too many retries while fetching libnode...'));
+      }
+      https.get(url, {headers: {'User-Agent': 'node.js'}}, async (fileRes) => {
+        fileRes.on("error", (ex) => {
+          reject(ex);
+        });
+        if (fileRes.statusCode == 302) {
+          // @ts-ignore
+          resolve(await fetchLib(fileRes.headers.location, retries -= 1));
+        }
+        const tmpPath = path.join(__dirname, "tmp.zip");
+        const fileStream = fs.createWriteStream(tmpPath);
+        fileRes.pipe(fileStream);
+        fileStream.on('finish', () => {
+          fileStream.close();
+          // @ts-ignore
+          resolve(fileStream.path);
+        });
+      });
+    } catch (ex) {
+      reject(ex);
+    }
+  });
+}
+
+/**
+ * 
+ * @param {string} zipPath 
+ * @param {string} destinationPath 
+ */
+async function extractAsset(zipPath, destinationPath) {
+  let zip = new AdmZip(zipPath);
+  zip.extractAllTo(destinationPath, true);
+  fs.unlinkSync(zipPath);
+}
+
+/**
+ * Create GYP file to fix error:
+ * `gyp: Undefined variable android_ndk_path in binding.gyp while trying to load binding.gypi`
+ */
+function createGYPconfig() {
+  if (platform != 'android') return;
+  
+  const gypDir = path.join(os.homedir(), '.gyp');
+  const gypFile = path.join(gypDir, 'include.gypi');
+
+  if (!fs.existsSync(gypDir)) {
+    fs.mkdirSync(gypDir);
+  }
+
+  const content = "{'variables':{'android_ndk_path':''}}";
+  fs.writeFileSync(gypFile, content);
+  console.log(`Created GYP config file at ${gypFile}`);
+}
 
 /**
  * @param {import('stream').Readable} readable
@@ -302,11 +408,7 @@ function undoPackageJSONPatch(cwd) {
  * @returns {import('child_process').ChildProcess}
  */
 function buildGypModule(cwd) {
-  const nodeMobileHeaders = path.resolve(
-    path.dirname(require.resolve('nodejs-mobile-react-native')),
-    platform,
-    'libnode',
-  );
+  const nodeMobileHeaders = path.resolve(libDir);
 
   let GYP_DEFINES = `OS=${platform} target_platform=${platform} target_arch=${arch}`;
 
@@ -483,12 +585,7 @@ function buildRustModule(cwd) {
       process.exit(1);
     }
 
-    const nodeMobileBin = path.resolve(
-      path.dirname(require.resolve('nodejs-mobile-react-native')),
-      'android',
-      'libnode',
-      'bin',
-    );
+    const nodeMobileBin = path.resolve(libDir, 'bin');
 
     let compilerPrefix = '';
     let ndkArch = '';
@@ -690,6 +787,9 @@ async function waitForCompilationTask(type, taskFn, cwd) {
 }
 
 (async function main() {
+  createGYPconfig();
+  await setLibDir();
+
   // Build the module
   const cwd = process.cwd();
   let task;
