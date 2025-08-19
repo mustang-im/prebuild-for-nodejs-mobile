@@ -98,7 +98,7 @@ const androidDefaultLib = 'https://github.com/nodejs-mobile/nodejs-mobile/releas
 const libEnv = `${platform.toUpperCase()}_LIBNODE`;
 const noLibCache = process.env.NO_LIBNODE_CACHE;
 /** @type {string} */
-let libDir = process.env[libEnv] ?? platform == 'android' ? androidDefaultLib : iosDefaultLib;
+let libDir = process.env[libEnv] ?? (platform == 'android' ? androidDefaultLib : iosDefaultLib);
 
 /**
  * Sets the correct lib path for the platform and
